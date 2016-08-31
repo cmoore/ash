@@ -3,7 +3,6 @@
 (defpackage #:ash
   (:use #:cl
         #:jsown
-        #:clouchdb
         #:parenscript)
   
   (:export #:make-raw-request

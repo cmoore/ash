@@ -30,10 +30,6 @@
                           :external-format-out :utf-8
                           ,@(when content `(:content ,content))))))
 
-;; (defmacro make-request (path &key (method :POST) (content nil))
-;;   `(parse
-;;     (make-raw-request ,path ,method ,content)))
-
 (defun close-session ()
   (make-request "/session/~a" :method :delete))
 

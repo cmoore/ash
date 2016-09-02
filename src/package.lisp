@@ -9,6 +9,7 @@
            #:make-request
            #:close-session
            #:with-session
+           #:with-a-session
            #:close-window
            #:page-open
            #:submit-form
@@ -24,6 +25,8 @@
            #:get-element-name
            
            #:send-keys
+           #:key
+           
            #:page-source
            #:page-click
            #:page-url

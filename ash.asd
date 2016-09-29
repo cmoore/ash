@@ -7,7 +7,8 @@
   
   :depends-on (#:drakma
                #:parenscript
-               #:jsown)
+               #:jsown
+               #:optima)
   
   :components ((:module "src"
                 :components ((:file "package")

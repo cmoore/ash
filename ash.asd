@@ -8,6 +8,7 @@
   :depends-on (#:drakma
                #:parenscript
                #:jsown)
+  
   :components ((:module "src"
                 :components ((:file "package")
                              (:file "ash")))))

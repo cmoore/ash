@@ -1,4 +1,4 @@
-;; -*- mode: Lisp; Syntax: COMMON-LISP; Package: ASH; Base: 10; -*-
+;; -*- mode: Lisp; Syntax: COMMON-LISP; Base: 10; eval: (hs-hide-all) -*-
 
 (in-package :ash)
 
@@ -7,7 +7,11 @@
 (defun default-capabilities ()
   (to-json
    (new-js
-     ("desiredCapabilities" (new-js ("browserName" "phantomjs"))))))
+     ("desiredCapabilities" (new-js ("browserName" "chrome")
+                                    ("chromeOptions" (new-js ("args" (list "user-data-dir=\\linkcheck-profile"
+                                                                           ;;"user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36"
+                                                                           ))
+                                                             ("detach" (as-js-bool nil)))))))))
 
 (defmacro make-raw-request (path &key (method :POST) (content nil))
   `(flexi-streams:octets-to-string
@@ -20,7 +24,7 @@
                          ,@(when content `(:content ,content)))))
 
 (defmacro make-request (path &key (method :POST) (content nil))
-  `(parse
+  `(jsown:parse
     (flexi-streams:octets-to-string
      (drakma:http-request (format nil "http://127.0.0.1:4444/wd/hub~a" ,path)
                           :method ,method
@@ -31,7 +35,7 @@
                           ,@(when content `(:content ,content))))))
 
 (defun close-session ()
-  (make-request "/session/~a" :method :delete))
+  (make-request (format nil "/session/~a" *session-id*) :method :delete))
 
 (defmacro with-session ((&key (autoclose nil))  &body body)
   (let ((json (gensym))
@@ -47,10 +51,18 @@
                ,result))
            (to-json (new-js ("error" (val ,json "value"))))))))
 
+(defun get-sessions ()
+  (let ((lx (make-request "/sessions" :method :GET)))
+    (mapcar (lambda (x)
+              (val x "id")) (val lx "value"))))
+
 (defmacro with-a-session (&body body)
-  `(let* ((lx (make-request "/sessions" :method :GET))
-          (*session-id* (val (car (val lx "value")) "id")))
-     ,@body))
+  (let ((current-ids (gensym)))
+    `(let* ((,current-ids (get-sessions))
+            (*session-id* (optima:match ,current-ids
+                            (() (error "No current sessions."))
+                            (otherwise (car ,current-ids)))))
+       ,@body)))
 
 (defun close-window ()
   (make-request (format nil "/session/~a/window" *session-id*)
@@ -96,6 +108,10 @@
     (if (string= (ignore-errors (val result "state")) "success")
         (val (val result "value") "ELEMENT")
         (val result "state"))))
+
+(defun get-current-element ()
+  (jsown:filter (make-request (format nil "/session/~a/element/active" *session-id*))
+                "value" "ELEMENT"))
 
 (defun get-element-name (element)
   (make-request (format nil "/session/~a/element/~a/name" *session-id* element)))

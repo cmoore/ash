@@ -7,9 +7,12 @@
   
   (:export #:make-raw-request
            #:make-request
+
+           #:get-sessions
            #:close-session
            #:with-session
            #:with-a-session
+           
            #:close-window
            #:page-open
            #:submit-form
@@ -19,13 +22,16 @@
            #:find-elements-from
            #:find-element-from
            #:find-element
-         
+
+           #:get-current-element
            #:get-parent
            #:get-element-attribute
            #:get-element-name
            
            #:send-keys
            #:key
+
+           #:page-open
            
            #:page-source
            #:page-click

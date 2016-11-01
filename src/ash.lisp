@@ -7,7 +7,7 @@
 (defun default-capabilities ()
   (to-json
    (new-js
-     ("desiredCapabilities" (new-js ("browserName" "chrome")
+     ("desiredCapabilities" (new-js ("browserName" "firefox")
                                     ("chromeOptions" (new-js ("args" (list "user-data-dir=\\linkcheck-profile"
                                                                            ;;"user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36"
                                                                            ))
@@ -115,6 +115,12 @@
 
 (defun get-element-name (element)
   (make-request (format nil "/session/~a/element/~a/name" *session-id* element)))
+
+(defun get-element-text (element)
+  (jsown:filter (make-request
+                 (format nil "/session/~a/element/~a/text" *session-id* element)
+                 :method :GET)
+                "value"))
 
 (defun get-parent (element)
   (find-element-from "xpath" "parent::*" element))

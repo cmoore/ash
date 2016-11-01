@@ -27,6 +27,7 @@
            #:get-parent
            #:get-element-attribute
            #:get-element-name
+           #:get-element-text
            
            #:send-keys
            #:key

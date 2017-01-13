@@ -68,6 +68,7 @@
                             (otherwise (car ,current-ids)))))
        ,@body)))
 
+
 (defun close-window ()
   (make-request (format nil "/session/~a/window" *session-id*)
                 :method :DELETE))
@@ -185,6 +186,8 @@
   (with-body-element
       (send-keys *body-element* "?")))
 
+(defun find-element-by-text (tag pattern)
+  (find-element "xpath" (format nil "//~a[normalize-space(.)='~a']" tag pattern)))
 
 
 

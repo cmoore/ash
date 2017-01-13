@@ -24,7 +24,8 @@
            #:find-elements-from
            #:find-element-from
            #:find-element
-
+           #:find-element-by-text
+           
            #:get-current-element
            #:get-parent
            #:get-element-attribute

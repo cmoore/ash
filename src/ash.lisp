@@ -4,6 +4,21 @@
 
 (defvar *session-id* nil)
 
+(defparameter *host* "127.0.0.1")
+(defparameter *port* 4444)
+
+(eval-when (:compile-toplevel :load-toplevel)
+  (defmacro make-request (path &key (method :POST) (content nil))
+    `(jsown:parse
+      (flexi-streams:octets-to-string
+       (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *host* *port* ,path)
+                            :method ,method
+                            :content-type "application/json"
+                            :accept "application/json"
+                            :external-format-in :utf-8
+                            :external-format-out :utf-8
+                            ,@(when content `(:content ,content)))))))
+
 (defun default-capabilities ()
   (to-json
    (new-js
@@ -23,21 +38,10 @@
                          :external-format-out :utf-8
                          ,@(when content `(:content ,content)))))
 
-(defmacro make-request (path &key (method :POST) (content nil))
-  `(jsown:parse
-    (flexi-streams:octets-to-string
-     (drakma:http-request (format nil "http://127.0.0.1:4444/wd/hub~a" ,path)
-                          :method ,method
-                          :content-type "application/json"
-                          :accept "application/json"
-                          :external-format-in :utf-8
-                          :external-format-out :utf-8
-                          ,@(when content `(:content ,content))))))
-
 (defun close-session ()
   (make-request (format nil "/session/~a" *session-id*) :method :delete))
 
-(defmacro with-session ((&key (autoclose nil))  &body body)
+(defmacro with-session ((&key (autoclose nil)) &body body)
   (let ((json (gensym))
         (result (gensym)))
     `(let ((,json (make-request "/session" :content (default-capabilities))))

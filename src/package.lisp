@@ -5,7 +5,9 @@
         #:jsown
         #:parenscript)
   
-  (:export #:make-raw-request
+  (:export *host*
+           *port*
+           #:make-raw-request
            #:make-request
 
            #:get-sessions

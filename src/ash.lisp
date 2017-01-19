@@ -4,14 +4,14 @@
 
 (defvar *session-id* nil)
 
-(defparameter *host* "127.0.0.1")
-(defparameter *port* 4444)
+(defparameter *ash-host* "127.0.0.1")
+(defparameter *ash-port* 4444)
 
 (eval-when (:compile-toplevel :load-toplevel)
   (defmacro make-request (path &key (method :POST) (content nil))
     `(jsown:parse
       (flexi-streams:octets-to-string
-       (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *host* *port* ,path)
+       (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
                             :method ,method
                             :content-type "application/json"
                             :accept "application/json"

@@ -22,7 +22,7 @@
 (defun default-capabilities ()
   (to-json
    (new-js
-     ("desiredCapabilities" (new-js ("browserName" "firefox")
+     ("desiredCapabilities" (new-js ("browserName" "chrome")
                                     ("chromeOptions" (new-js ("args" (list "user-data-dir=\\linkcheck-profile"
                                                                            ;;"user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36"
                                                                            ))
@@ -61,12 +61,21 @@
               (val x "id")) (val lx "value"))))
 
 (defmacro with-a-session (&body body)
-  (let ((current-ids (gensym)))
-    `(let* ((,current-ids (get-sessions))
-            (*session-id* (optima:match ,current-ids
-                            (() (error "No current sessions."))
-                            (otherwise (car ,current-ids)))))
-       ,@body)))
+  (let ((gs-sessions (gensym)))
+    `(let ((,gs-sessions (get-sessions)))
+       (optima:match ,gs-sessions
+         (() (with-session (:autoclose nil)
+               ,@body))
+         (otherwise (let ((*session-id* (car ,gs-sessions)))
+                      ,@body))))))
+
+;; (defmacro with-a-session (&body body)
+;;   (let ((current-ids (gensym)))
+;;     `(let* ((,current-ids (get-sessions))
+;;             (*session-id* (optima:match ,current-ids
+;;                             (() (error "No current sessions."))
+;;                             (otherwise (car ,current-ids)))))
+;;        ,@body)))
 
 
 (defun close-window ()
@@ -112,7 +121,11 @@
                                                         ("value" value))))))
     (if (string= (ignore-errors (val result "state")) "success")
         (val (val result "value") "ELEMENT")
-        (val result "state"))))
+        (let ((retv (val result "state")))
+          (cond ((string= "no such element" retv) nil)
+                (t retv)))
+        ;(cond ((string= "unknown element" (val result "state"))))
+        )))
 
 (defun get-current-element ()
   (jsown:filter (make-request (format nil "/session/~a/element/active" *session-id*))
@@ -154,6 +167,11 @@
                            :method :GET)
              "value"))
 
+(defun get-element-location (element)
+  (make-request (format nil "/session/~a/element/~a/location" *session-id* element)))
+
+(defun move-to (element)
+  (make-request (format nil "~/session/~a/")))
 (defun page-click (element)
   (make-request (format nil "/session/~a/element/~a/click" *session-id* element)))
 

@@ -5,8 +5,8 @@
         #:jsown
         #:parenscript)
   
-  (:export *host*
-           *port*
+  (:export *ash-host*
+           *ash-port*
            #:make-raw-request
            #:make-request
 

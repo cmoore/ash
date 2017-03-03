@@ -43,4 +43,5 @@
            #:page-url
            #:focus-frame
            #:page-scroll
-           #:take-screenshot))
+           #:take-screenshot
+           #:execute-javascript))

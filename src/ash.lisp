@@ -8,7 +8,7 @@
 (defparameter *ash-port* 4444)
 
 (eval-when (:compile-toplevel :load-toplevel)
-  (defmacro make-request (path &key (method :POST) (content nil))
+  (defmacro make-request (path &key (method :POST) (content nil) (parameters nil))
     `(jsown:parse
       (flexi-streams:octets-to-string
        (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
@@ -17,16 +17,13 @@
                             :accept "application/json"
                             :external-format-in :utf-8
                             :external-format-out :utf-8
+                            ,@(when parameters `(:parameters ,parameters))
                             ,@(when content `(:content ,content)))))))
 
 (defun default-capabilities ()
   (to-json
    (new-js
-     ("desiredCapabilities" (new-js ("browserName" "firefox")
-                                    ("chromeOptions" (new-js ("args" (list "user-data-dir=\\linkcheck-profile"
-                                                                           ;;"user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36"
-                                                                           ))
-                                                             ("detach" (as-js-bool nil)))))))))
+     ("desiredCapabilities" (new-js ("browserName" "firefox"))))))
 
 (defmacro make-raw-request (path &key (method :POST) (content nil))
   `(flexi-streams:octets-to-string
@@ -69,13 +66,13 @@
          (otherwise (let ((*session-id* (car ,gs-sessions)))
                       ,@body))))))
 
-;; (defmacro with-a-session (&body body)
-;;   (let ((current-ids (gensym)))
-;;     `(let* ((,current-ids (get-sessions))
-;;             (*session-id* (optima:match ,current-ids
-;;                             (() (error "No current sessions."))
-;;                             (otherwise (car ,current-ids)))))
-;;        ,@body)))
+(defmacro -with-a-session (&body body)
+  (let ((current-ids (gensym)))
+    `(let* ((,current-ids (get-sessions))
+            (*session-id* (optima:match ,current-ids
+                            (() (error "No current sessions."))
+                            (otherwise (car ,current-ids)))))
+       ,@body)))
 
 
 (defun close-window ()
@@ -187,7 +184,17 @@
   (make-request (format nil "/session/~a/touch/scroll" *session-id*)))
 
 (defun take-screenshot ()
-  (make-request (format nil "/session/~a/screenshot" *session-id*)))
+  (let ((result (make-request (format nil "/session/~a/screenshot" *session-id*)
+                              :method :get)))
+    (jsown:val result "value")))
+
+(defun execute-javascript (javascript)
+  (make-request (format nil "/session/~a/execute/sync" *session-id*)
+                :method :post
+                :content (with-output-to-string (stream)
+                           (yason:encode-alist (list (cons "script" javascript)
+                                                     (cons "args" (list "a")))
+                                               stream))))
 
 (defparameter *body-element* nil)
 

@@ -20,10 +20,23 @@
                             ,@(when parameters `(:parameters ,parameters))
                             ,@(when content `(:content ,content)))))))
 
+
 (defun default-capabilities ()
-  (to-json
-   (new-js
-     ("desiredCapabilities" (new-js ("browserName" "firefox"))))))
+  (with-output-to-string (sink)
+    (yason:encode
+     (alexandria:alist-hash-table
+      (list (cons "desiredCapabilities" (alexandria:alist-hash-table
+                                         (list (cons "browserName" "firefox")
+                                               (cons "moz:firefoxOptions" (alist-hash-table
+                                                                           (list ;;(cons "args" (list "-headless" "-profile" "/home/cmoore/quicklisp/local-projects/lengle/prof/ff"))
+                                                                                 (cons "prefs" (alist-hash-table
+                                                                                                (list (cons "dom.ipc.processCount" 8)
+                                                                                                      (cons "permissions.default.image" 2)
+                                                                                                      (cons "browser.sessionhistory.max_entries" 10))))))))))))
+     sink)))
+;; (to-json
+;;  (new-js
+;;    ("desiredCapabilities" (new-js ("browserName" "firefox")))))
 
 (defmacro make-raw-request (path &key (method :POST) (content nil))
   `(flexi-streams:octets-to-string
@@ -90,6 +103,10 @@
   (val (make-request (format nil "/session/~a/title" *session-id*)
                            :method :GET)
              "value"))
+
+(defun find-elements (method value)
+  (let ((body (find-element "tag name" "body")))
+    (find-elements-from method value body)))
 
 (defun find-elements-from (method value element)
   (let ((result (make-request (format nil "/session/~a/element/~a/elements" *session-id* element)
@@ -166,8 +183,6 @@
 (defun get-element-location (element)
   (make-request (format nil "/session/~a/element/~a/location" *session-id* element)))
 
-(defun move-to (element)
-  (make-request (format nil "~/session/~a/")))
 (defun page-click (element)
   (make-request (format nil "/session/~a/element/~a/click" *session-id* element)))
 
@@ -212,6 +227,9 @@
 
 (defun find-element-by-text (tag pattern)
   (find-element "xpath" (format nil "//~a[normalize-space(.)='~a']" tag pattern)))
+
+(defun find-elements-by-text (tag pattern)
+  (find-elements "xpath" (format nil "//~a[normalize-space(.)='~a']" tag pattern)))
 
 
 

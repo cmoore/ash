@@ -7,6 +7,7 @@
   
   :depends-on (#:drakma
                #:parenscript
+               #:yason
                #:jsown
                #:optima)
   

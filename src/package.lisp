@@ -14,13 +14,17 @@
            #:close-session
            #:with-session
            #:with-a-session
+
+           #:*body-element*
+           #:with-body-element
            
            #:close-window
            #:page-open
            #:submit-form
            
            #:page-title
-           
+
+           #:find-elements
            #:find-elements-from
            #:find-element-from
            #:find-element
@@ -44,4 +48,6 @@
            #:focus-frame
            #:page-scroll
            #:take-screenshot
-           #:execute-javascript))
+           #:execute-javascript)
+  
+  (:import-from :alexandria :hash-table-keys :alist-hash-table))

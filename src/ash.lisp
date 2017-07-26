@@ -10,15 +10,14 @@
 (eval-when (:compile-toplevel :load-toplevel)
   (defmacro make-request (path &key (method :POST) (content nil) (parameters nil))
     `(jsown:parse
-      (flexi-streams:octets-to-string
-       (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
-                            :method ,method
-                            :content-type "application/json"
-                            :accept "application/json"
-                            :external-format-in :utf-8
-                            :external-format-out :utf-8
-                            ,@(when parameters `(:parameters ,parameters))
-                            ,@(when content `(:content ,content)))))))
+      (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
+                           :method ,method
+                           :content-type "application/json"
+                           :accept "application/json"
+                           :external-format-in :utf-8
+                           :external-format-out :utf-8
+                           ,@(when parameters `(:parameters ,parameters))
+                           ,@(when content `(:content ,content))))))
 
 
 (defun default-capabilities ()
@@ -64,6 +63,22 @@
                      (close-session)))
                ,result))
            (to-json (new-js ("error" (val ,json "value"))))))))
+
+(defmacro safe-with-session (&body body)
+  (let ((json (gensym))
+        (result (gensym)))
+    `(let ((,json (make-request "/session" :content (default-capabilities))))
+       (unwind-protect 
+            (if (member "sessionId" (keywords ,json) :test #'string=)
+                (let ((*session-id* (val ,json "sessionId")))
+                  (let ((,result (progn ,@body)))
+                    (close-window)
+                    (close-session)
+                    ,result))
+                (to-json (new-js ("error" (val ,json "value")))))
+         (progn
+           (close-window)
+           (close-session))))))
 
 (defun get-sessions ()
   (let ((lx (make-request "/sessions" :method :GET)))

@@ -13,6 +13,7 @@
            #:get-sessions
            #:close-session
            #:with-session
+           #:safe-with-session
            #:with-a-session
 
            #:*body-element*
@@ -29,7 +30,8 @@
            #:find-element-from
            #:find-element
            #:find-element-by-text
-
+           #:find-elements-by-text
+           
            #:get-element-location
            #:get-current-element
            #:get-parent

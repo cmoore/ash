@@ -16,6 +16,7 @@
                            :accept "application/json"
                            :external-format-in :utf-8
                            :external-format-out :utf-8
+                           :connection-timeout 60
                            ,@(when parameters `(:parameters ,parameters))
                            ,@(when content `(:content ,content))))))
 

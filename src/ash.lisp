@@ -20,7 +20,6 @@
                            ,@(when parameters `(:parameters ,parameters))
                            ,@(when content `(:content ,content))))))
 
-
 (defun default-capabilities ()
   (with-output-to-string (sink)
     (yason:encode
@@ -49,9 +48,11 @@
                          ,@(when content `(:content ,content)))))
 
 (defun close-session ()
+  "Close the current session, quitting the browser instance."
   (make-request (format nil "/session/~a" *session-id*) :method :delete))
 
 (defmacro with-session ((&key (autoclose t)) &body body)
+  "Execute the body in a fresh session and browser instance."
   (let ((json (gensym))
         (result (gensym)))
     `(let ((,json (make-request "/session" :content (default-capabilities))))
@@ -82,11 +83,13 @@
            (close-session))))))
 
 (defun get-sessions ()
+  "Returns a list of the session ids currently active on the server."
   (let ((lx (make-request "/sessions" :method :GET)))
     (mapcar (lambda (x)
               (val x "id")) (val lx "value"))))
 
 (defmacro with-a-session (&body body)
+  "Execute the body using the first avilable session on the server."
   (let ((gs-sessions (gensym)))
     `(let ((,gs-sessions (get-sessions)))
        (optima:match ,gs-sessions
@@ -95,36 +98,33 @@
          (otherwise (let ((*session-id* (car ,gs-sessions)))
                       ,@body))))))
 
-(defmacro -with-a-session (&body body)
-  (let ((current-ids (gensym)))
-    `(let* ((,current-ids (get-sessions))
-            (*session-id* (optima:match ,current-ids
-                            (() (error "No current sessions."))
-                            (otherwise (car ,current-ids)))))
-       ,@body)))
-
-
 (defun close-window ()
+  "Close the current browser window."
   (make-request (format nil "/session/~a/window" *session-id*)
                 :method :DELETE))
 
 (defun page-open (url)
+  "Open a URL"
   (make-request (format nil "/session/~a/url" *session-id*)
                 :content (to-json (new-js ("url" url)))))
 
 (defun submit-form (element)
+  "Assumes the element passed is a FORM element, and submits it."
   (make-request (format nil "/session/~a/element/~a/submit" *session-id* element)))
 
 (defun page-title ()
+  "Returns the page title."
   (val (make-request (format nil "/session/~a/title" *session-id*)
                            :method :GET)
              "value"))
 
 (defun find-elements (method value)
+  "Find a list of elements."
   (let ((body (find-element "tag name" "body")))
     (find-elements-from method value body)))
 
 (defun find-elements-from (method value element)
+  "Find a list of elements underneath <element> in the document hierarchy."
   (let ((result (make-request (format nil "/session/~a/element/~a/elements" *session-id* element)
                               :method :POST
                               :content (to-json (new-js ("using" method)
@@ -136,6 +136,7 @@
         (val result "state"))))
 
 (defun find-element-from (method value element)
+  "Find a single element underneath <element> in the document hierarchy."
   (let ((result (make-request (format nil "/session/~a/element/~a/element" *session-id* element)
                               :method :POST
                               :content (to-json (new-js ("using" method)
@@ -145,6 +146,7 @@
         (val result "state"))))
 
 (defun find-element (method value)
+  "Find the first matching element."
   (let ((result (make-request (format nil "/session/~a/element" *session-id*)
                               :method :POST
                               :content (to-json (new-js ("using" method)
@@ -153,30 +155,34 @@
         (val (val result "value") "ELEMENT")
         (let ((retv (val result "state")))
           (cond ((string= "no such element" retv) nil)
-                (t retv)))
-        ;(cond ((string= "unknown element" (val result "state"))))
-        )))
+                (t retv))))))
 
 (defun get-current-element ()
+  "Returns the 'active' element."
   (jsown:filter (make-request (format nil "/session/~a/element/active" *session-id*))
                 "value" "ELEMENT"))
 
 (defun get-element-name (element)
+  "Returns the name of the element, ie. FORM, HR, etc."
   (make-request (format nil "/session/~a/element/~a/name" *session-id* element)))
 
 (defun get-element-text (element)
+  "Returns the text, if any, of the element."
   (let ((result (make-request (format nil "/session/~a/element/~a/text" *session-id* element)
                               :method :GET)))
     (values (jsown:filter result "value") result)))
 
 (defun get-parent (element)
+  "Returns the parent element of <element>."
   (find-element-from "xpath" "parent::*" element))
 
 (defun backwards-find-element-from (method value element predicate)
+  "Finds the first matching element above the element specified in <element>."
   (filter predicate (find-elements-from method value
                                         (find-element-from "xpath" ".." element))))
 
 (defun get-element-attribute (attribute element)
+  "Get an attribute from <element>.  SRC, CLASS, etc."
   (let ((result (make-request (format nil "/session/~a/element/~a/attribute/~a" *session-id* element attribute)
                               :method :GET)))
     (if (string= (ignore-errors (val result "state")) "success")
@@ -184,6 +190,7 @@
         (val result "state"))))
 
 (defun send-keys (element text)
+  "Send keystrokes to <element>."
   (labels ((string-arrayify (string) (map 'list (lambda (x)
                                                   (format nil "~a" x))
                                           string)))
@@ -192,6 +199,7 @@
                   :content (to-json (new-js ("value" (string-arrayify text)))))))
 
 (defun page-source ()
+  "Returns the source of the current page."
   (val (make-request (format nil "/session/~a/source" *session-id*)
                            :method :GET)
              "value"))
@@ -215,6 +223,26 @@
   (make-request (format nil "/session/~a/touch/scroll" *session-id*)))
 
 (defun take-screenshot ()
+  "Takes a screenshot of the current page.
+
+   Usually used like so:
+
+(ql:quickload 's-base64)
+
+(defun write-base64-image (path data)
+  (with-open-file (image-out path
+                             :direction :output
+                             :if-exists :supersede
+                             :if-does-not-exist :create
+                             :element-type '(unsigned-byte 8))
+    (with-input-from-string (image-in data)
+      (s-base64:decode-base64 image-in image-out))))
+
+(defun take-a-screenshot ()
+  (let ((ss-data (ash:take-screenshot)))
+    (write-base64-image (format nil "~a.jpg" (uuid:make-v4-uuid)) ss-data)
+    nil))
+"
   (let ((result (make-request (format nil "/session/~a/screenshot" *session-id*)
                               :method :get)))
     (jsown:val result "value")))

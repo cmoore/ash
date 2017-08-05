@@ -11,6 +11,12 @@ It is *incomplete* - This was written for a separate project and I added functio
 
 * Examples
 
+#+NAME: setup
+#+BEGIN_SRC lisp
+(setf *ash-host* "127.0.0.1")
+(setf *ash-port* 4444)
+#+END_SRC
+
 #+NAME: example1
 #+BEGIN_SRC lisp
 (with-session ()

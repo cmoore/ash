@@ -51,7 +51,7 @@
 (defun close-session ()
   (make-request (format nil "/session/~a" *session-id*) :method :delete))
 
-(defmacro with-session ((&key (autoclose nil)) &body body)
+(defmacro with-session ((&key (autoclose t)) &body body)
   (let ((json (gensym))
         (result (gensym)))
     `(let ((,json (make-request "/session" :content (default-capabilities))))

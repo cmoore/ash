@@ -6,6 +6,34 @@
 
 Ash is a Selenium client for Common Lisp.  It was written against the Selenium 2.x JSON wire protocol described [[https://w3c.github.io/webdriver/webdriver-spec.html][here]].
 
-It is *incomplete* - This was written for a separate project and I added functionality as I needed it.
+It is *incomplete* - This was written for a separate project and I added functionality as I needed it.  Over time, however, it has proved to be quite useful.
 
+
+* Examples
+
+#+NAME: example1
+#+BEGIN_SRC lisp
+(with-session ()
+  (page-open "http://google.com"))
+#+END_SRC
+
+Creates a new session, opens the page, and closes the session.
+
+#+NAME: example2
+#+BEGIN_SRC lisp
+(with-session (:autoclose nil)
+  (page-open "http://www.google.com"))
+#+END_SRC
+
+Creates a new session, opens the page, but does not close the session.
+
+#+NAME: example3
+#+BEGIN_SRC lisp
+(with-a-session
+  (page-click (find-element-by-text "Login")))
+#+END_SRC
+
+Uses the session from example2, and clicks on the first element with the text "Login".
+
+Note that ~with-a-session~ will use the *first available session* with no regard to whether it is in use or not.  If you're using Selenium Grid, or using multiple connections to Selenium, you're almost always better off using ~with-session~.
 

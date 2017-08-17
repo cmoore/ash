@@ -2,7 +2,7 @@
 
 (defpackage #:ash
   (:use #:cl
-        #:jsown
+        #:yason
         #:parenscript)
   
   (:export *ash-host*
@@ -52,4 +52,5 @@
            #:take-screenshot
            #:execute-javascript)
   
-  (:import-from :alexandria :hash-table-keys :alist-hash-table))
+  (:import-from :alexandria :hash-table-keys :alist-hash-table)
+  (:shadowing-import-from #:yason #:false))

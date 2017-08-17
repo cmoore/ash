@@ -8,7 +8,6 @@
   :depends-on (#:drakma
                #:parenscript
                #:yason
-               #:jsown
                #:optima)
   
   :components ((:module "src"

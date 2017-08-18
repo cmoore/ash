@@ -10,6 +10,4 @@
                #:yason
                #:optima)
   
-  :components ((:module "src"
-                :components ((:file "package")
-                             (:file "ash")))))
+  :components ((:file "ash")))

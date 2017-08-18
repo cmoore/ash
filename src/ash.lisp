@@ -77,6 +77,10 @@
            (close-window)
            (close-session))))))
 
+(defmacro with-body-element (&rest body)
+  `(let ((*body-element* (find-element "xpath" "//body")))
+     ,@body))
+
 (defun get-sessions ()
   "Returns a list of the session ids currently active on the server."
   (let ((lx (make-request "/sessions" :method :GET)))
@@ -219,10 +223,6 @@
                                         (cons "args" (list "a"))))))
 
 (defparameter *body-element* nil)
-
-(defmacro with-body-element (&rest body)
-  `(let ((*body-element* (find-element "css selector" "body")))
-     ,@body))
 
 (defun page-page-down ()
   (with-body-element

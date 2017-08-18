@@ -10,4 +10,4 @@
                #:yason
                #:optima)
   
-  :components (:file "ash"))
+  :components ((:file "ash")))

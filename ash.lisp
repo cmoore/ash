@@ -57,6 +57,9 @@
 
 (in-package :ash)
 
+(defmacro sassoc (place alist)
+  `(assoc ,place ,alist :test #'string=))
+
 (defvar *session-id* nil)
 
 (defparameter *ash-host* "127.0.0.1")
@@ -131,14 +134,12 @@
                    (close-window)
                    (close-session)))
              ,result))
-         (list (cons "error" . (assoc :value ,result-alist)))))))
+         (list `(cons "error" . ,(assoc :value ,result-alist)))))))
 
 (defmacro with-body-element (&rest body)
   `(let ((*body-element* (caar (cdr (find-element "xpath" "//body")))))
      ,@body))
 
-(defmacro sassoc (place alist)
-  `(assoc ,place ,alist :test #'string=))
 
 (defun get-sessions ()
   "Returns a list of the session ids currently active on the server."
@@ -227,11 +228,6 @@
 (defun get-parent (element)
   "Returns the parent element of <element>."
   (find-element-from "xpath" "parent::*" element))
-
-(defun backwards-find-element-from (method value element predicate)
-  "Finds the first matching element above the element specified in <element>."
-  (filter predicate (find-elements-from method value
-                                        (find-element-from "xpath" ".." element))))
 
 (defun get-element-attribute (attribute element)
   "Get an attribute from <element>.  SRC, CLASS, etc."

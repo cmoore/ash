@@ -322,6 +322,7 @@
 ;;
 ;;
 
+#-allegro
 (defvar *keymap*
   '(:null #\ue000
     :cancel #\ue001
@@ -380,5 +381,6 @@
     :meta #\ue03d))
 
 ;; TODO: prepare all keys on compile
+#-allegro
 (defun key (key)
   (make-string 1 :initial-element (getf *keymap* key)))

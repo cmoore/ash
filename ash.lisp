@@ -7,7 +7,6 @@
   
   (:export *ash-host*
            *ash-port*
-           #:make-raw-request
            #:make-request
 
            #:get-sessions
@@ -15,7 +14,7 @@
            #:with-session
            #:safe-with-session
            #:with-a-session
-
+           #:new-session
            #:*body-element*
            #:with-body-element
            
@@ -44,7 +43,7 @@
 
            #:page-open
            
-           #:page-source
+           #:get-page-source
            #:page-click
            #:page-url
            #:focus-frame
@@ -67,17 +66,18 @@
 (defparameter *ash-port* 4444)
 
 (defmacro make-request (path &key (method :POST) (content nil) (parameters nil))
-  `(let ((yason:*parse-object-as* :alist))
-     (yason:parse
-      (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
-                           :method ,method
-                           :content-type "application/json"
-                           :accept "application/json"
-                           :external-format-in :utf-8
-                           :external-format-out :utf-8
-                           :connection-timeout 60
-                           ,@(when parameters `(:parameters ,parameters))
-                           ,@(when content `(:content ,content))))))
+  (with-gensyms (result)
+    `(let ((yason:*parse-object-as* :alist))
+       (yason:parse
+        (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
+                             :method ,method
+                             :content-type "application/json"
+                             :accept "application/json"
+                             :external-format-in :utf-8
+                             :external-format-out :utf-8
+                             :connection-timeout 60
+                             ,@(when parameters `(:parameters ,parameters))
+                             ,@(when content `(:content ,content)))))))
 
 (defun default-capabilities ()
   (with-output-to-string (sink)
@@ -88,7 +88,7 @@
                    (list (cons "browserName" "chrome")
                          ;; (cons "goog:chromeOptions" (alist-hash-table
                          ;;                             (list (cons ""))))
-                         (cons "webdriver.chrome.driver" "/usr/local/bin/chromedriver")
+                         ;;(cons "webdriver.chrome.driver" "/usr/local/bin/chromedriver76")
                          (cons "goog:loggingPrefs" (alist-hash-table
                                                     (list (cons "browser" "ALL")
                                                           (cons "server" "ALL")
@@ -122,6 +122,7 @@
   `(let ((*session-id* ,session-id))
      (progn ,@body)))
 
+
 (defmacro with-session ((&key (autoclose t)) &body body)
   "Execute the body in a fresh session and browser instance."
   (with-gensyms (result-alist result)
@@ -136,6 +137,21 @@
              ,result))
          (list `(cons "error" . ,(assoc :value ,result-alist)))))))
 
+(defun new-session ()
+  (cdr (sassoc "webdriver.remote.sessionid"
+               (cdr (sassoc "value" (make-request "/session" :content (default-capabilities)))))))
+
+(defmacro with-a-session (&body body)
+  "Execute the body using the first avilable session on the server."
+  (let ((gs-sessions (gensym)))
+    `(let ((,gs-sessions (get-sessions)))
+       (optima:match ,gs-sessions
+         (() (with-session (:autoclose nil)
+               ,@body))
+         (otherwise (let ((*session-id* (car ,gs-sessions)))
+                      ,@body))))))
+
+
 (defmacro with-body-element (&rest body)
   `(let ((*body-element* (caar (cdr (find-element "xpath" "//body")))))
      ,@body))
@@ -147,16 +163,6 @@
     (mapcar (lambda (x)
               (cdr (sassoc "id" x)))
             (cdr (sassoc "value" lx)))))
-
-(defmacro with-a-session (&body body)
-  "Execute the body using the first avilable session on the server."
-  (let ((gs-sessions (gensym)))
-    `(let ((,gs-sessions (get-sessions)))
-       (optima:match ,gs-sessions
-         (() (with-session (:autoclose nil)
-               ,@body))
-         (otherwise (let ((*session-id* (car ,gs-sessions)))
-                      ,@body))))))
 
 (defun close-window ()
   "Close the current browser window."
@@ -243,7 +249,7 @@
     (make-request (format nil "/session/~a/element/~a/value" *session-id* element)
                   :content (to-json (list (cons "value" (string-arrayify text)))))))
 
-(defun page-source ()
+(defun get-page-source ()
   "Returns the source of the current page."
   (make-request (format nil "/session/~a/source" *session-id*)
                 :method :GET))

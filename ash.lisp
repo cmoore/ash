@@ -265,11 +265,15 @@
   (make-request (format nil "/session/~a/element/~a/location" *session-id* element)))
 
 (defun page-click (element)
-  (make-request (format nil "/session/~a/element/~a/click" *session-id* element)))
+  (cdr
+   (sassoc "state"
+           (make-request (format nil "/session/~a/element/~a/click" *session-id* element)))))
 
 (defun page-url ()
-  (gethash "value" (make-request (format nil "/session/~a/url" *session-id*)
-                           :method :GET)))
+  (cdr (assoc "value"
+              (make-request (format nil "/session/~a/url" *session-id*)
+                            :method :GET)
+              :test #'string=)))
 
 (defun focus-frame (&key (element nil))
   (make-request (format nil "/session/~a/frame" *session-id*)

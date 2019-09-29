@@ -51,7 +51,7 @@
            #:take-screenshot
            #:execute-javascript)
   
-  (:import-from :alexandria :hash-table-keys :alist-hash-table :with-gensyms)
+  (:local-nicknames (:alex :alexandria))
   (:shadowing-import-from #:yason #:false))
 
 (in-package :ash)
@@ -66,30 +66,29 @@
 (defparameter *ash-port* 4444)
 
 (defmacro make-request (path &key (method :POST) (content nil) (parameters nil))
-  (with-gensyms (result)
-    `(let ((yason:*parse-object-as* :alist))
-       (yason:parse
-        (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
-                             :method ,method
-                             :content-type "application/json"
-                             :accept "application/json"
-                             :external-format-in :utf-8
-                             :external-format-out :utf-8
-                             :connection-timeout 60
-                             ,@(when parameters `(:parameters ,parameters))
-                             ,@(when content `(:content ,content)))))))
+  `(let ((yason:*parse-object-as* :alist))
+     (yason:parse
+      (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
+                           :method ,method
+                           :content-type "application/json"
+                           :accept "application/json"
+                           :external-format-in :utf-8
+                           :external-format-out :utf-8
+                           :connection-timeout 60
+                           ,@(when parameters `(:parameters ,parameters))
+                           ,@(when content `(:content ,content))))))
 
 (defun default-capabilities ()
   (with-output-to-string (sink)
     (yason:encode
-     (alist-hash-table
+     (alex:alist-hash-table
       (list (cons "desiredCapabilities"
-                  (alist-hash-table
+                  (alex:alist-hash-table
                    (list (cons "browserName" "chrome")
                          ;; (cons "goog:chromeOptions" (alist-hash-table
                          ;;                             (list (cons ""))))
                          ;;(cons "webdriver.chrome.driver" "/usr/local/bin/chromedriver76")
-                         (cons "goog:loggingPrefs" (alist-hash-table
+                         (cons "goog:loggingPrefs" (alex:alist-hash-table
                                                     (list (cons "browser" "ALL")
                                                           (cons "server" "ALL")
                                                           (cons "performance" "ALL")
@@ -97,11 +96,11 @@
                                                           (cons "client" "ALL")
                                                           (cons "driver" "INFO"))))
                          (cons "moz:firefoxOptions"
-                               (alist-hash-table
+                               (alex:alist-hash-table
                                 (list
                                  ;;(cons "binary" "/usr/local/bin/firefox")
                                  (cons "prefs"
-                                       (alist-hash-table
+                                       (alex:alist-hash-table
                                         (list (cons "dom.ipc.processCount" 8)
                                               (cons "devtools.console.stdout.content" "info")
                                               (cons "permissions.default.image" 2)
@@ -111,7 +110,7 @@
 (defun to-json (list)
   (check-type list list)
   (with-output-to-string (sink)
-    (yason:encode (alist-hash-table list) sink)))
+    (yason:encode (alex:alist-hash-table list) sink)))
 
 (defun close-session ()
   "Close the current session, quitting the browser instance."
@@ -125,7 +124,7 @@
 
 (defmacro with-session ((&key (autoclose t)) &body body)
   "Execute the body in a fresh session and browser instance."
-  (with-gensyms (result-alist result)
+  (alex:with-gensyms (result-alist result)
     `(let ((,result-alist (make-request "/session" :content (default-capabilities))))
        (alexandria:if-let ((session-id (cdr (sassoc "sessionId" ,result-alist))))
          (let ((*session-id* session-id))
@@ -153,7 +152,7 @@
 
 
 (defmacro with-body-element (&rest body)
-  `(let ((*body-element* (caar (cdr (find-element "xpath" "//body")))))
+  `(let ((*body-element* (find-element "xpath" "//body")))
      ,@body))
 
 
@@ -194,8 +193,11 @@
 
 (defun find-elements (method value)
   "Find a list of elements."
-  (with-body-element
-    (find-elements-from method value *body-element*)))
+  (let ((result (with-body-element
+                    (find-elements-from method value *body-element*))))
+    
+    (values (mapcar #'cdar (cdr (assoc "value" result :test #'string=)))
+            result)))
 
 (defun find-elements-from (method value element)
   "Find a list of elements underneath <element> in the document hierarchy."
@@ -213,10 +215,12 @@
 
 (defun find-element (method value)
   "Find the first matching element."
-  (make-request (format nil "/session/~a/element" *session-id*)
-                   :method :POST
-                   :content (to-json (list (cons "using" method)
-                                           (cons "value" value)))))
+  (let ((result (make-request (format nil "/session/~a/element" *session-id*)
+                              :method :POST
+                              :content (to-json (list (cons "using" method)
+                                                      (cons "value" value))))))
+    (values (cdadr (assoc "value" result :test #'string=))
+            result)))
 
 (defun get-current-element ()
   "Returns the 'active' element."
@@ -228,8 +232,11 @@
 
 (defun get-element-text (element)
   "Returns the text, if any, of the element."
-  (make-request (format nil "/session/~a/element/~a/text" *session-id* element)
-                :method :GET))
+  (let ((result (make-request (format nil "/session/~a/element/~a/text" *session-id* element)
+                              :method :GET)))
+    
+    (values (cdr (assoc "value" result :test #'string=))
+            result )))
 
 (defun get-parent (element)
   "Returns the parent element of <element>."

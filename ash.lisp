@@ -1,12 +1,20 @@
 ;; -*- mode: Lisp; Syntax: COMMON-LISP; Base: 10; eval: (hs-hide-all) -*-
 
+
+;; Hey, you, RavenPack lisper.  Parts of this are seriously broken.
+;; Functions that use `make-request` used to all give back a hash
+;; table but I decided it was better to return lists.  A kind estimate
+;; would put it at about 60% converted.
+
+
 (defpackage #:ash
   (:use #:cl
-        #:yason
         #:parenscript)
   
-  (:export *ash-host*
-           *ash-port*
+  (:export *host*
+           *port*
+           *capabilities*
+           
            #:make-request
 
            #:get-sessions
@@ -15,7 +23,6 @@
            #:safe-with-session
            #:with-a-session
            #:new-session
-           #:*body-element*
            #:with-body-element
            
            #:close-window
@@ -49,58 +56,61 @@
            #:focus-frame
            #:page-scroll
            #:take-screenshot
-           #:execute-javascript)
+           #:execute-javascript
+
+           :get-cookies
+           :get-cookie
+           :set-cookie
+           :delete-cookie
+           :delete-all-cookies)
   
-  (:local-nicknames (:alex :alexandria))
+  (:import-from :alexandria :alist-hash-table :with-gensyms :if-let)
   (:shadowing-import-from #:yason #:false))
 
 (in-package :ash)
 
-(defmacro sassoc (place alist)
-  `(assoc ,place ,alist :test #'string=))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (intern "SESSIONID")
+  (defun maybe-convert-to-keyword (json-key)
+    (or (find-symbol (string-upcase json-key) :keyword)
+        json-key)))
 
 (defvar *session-id* nil)
 
-(defparameter *ash-host* "127.0.0.1")
+(defparameter *host* "127.0.0.1")
 
-(defparameter *ash-port* 4444)
+(defparameter *port* 4444)
 
-(defmacro make-request (path &key (method :POST) (content nil) (parameters nil))
-  `(let ((yason:*parse-object-as* :alist))
-     (yason:parse
-      (drakma:http-request (format nil "http://~a:~a/wd/hub~a" *ash-host* *ash-port* ,path)
-                           :method ,method
-                           :content-type "application/json"
-                           :accept "application/json"
-                           :external-format-in :utf-8
-                           :external-format-out :utf-8
-                           :connection-timeout 60
-                           ,@(when parameters `(:parameters ,parameters))
-                           ,@(when content `(:content ,content))))))
+(defparameter *capabilities* nil)
+
+
 
 (defun default-capabilities ()
   (with-output-to-string (sink)
     (yason:encode
-     (alex:alist-hash-table
+     (alist-hash-table
       (list (cons "desiredCapabilities"
-                  (alex:alist-hash-table
+                  (alist-hash-table
+                   ;; There are a billion fiddly options with no authorative resource.
                    (list (cons "browserName" "chrome")
-                         ;; (cons "goog:chromeOptions" (alist-hash-table
-                         ;;                             (list (cons ""))))
-                         ;;(cons "webdriver.chrome.driver" "/usr/local/bin/chromedriver76")
-                         (cons "goog:loggingPrefs" (alex:alist-hash-table
+                         (cons "chromeOptions" (alist-hash-table
+                                                (list (cons "args" (list "--disable-gpu"
+                                                                         "enable-automation"
+                                                                         "--disable-browser-side-navigation")))))
+                         (cons "goog:loggingPrefs" (alist-hash-table
                                                     (list (cons "browser" "ALL")
                                                           (cons "server" "ALL")
                                                           (cons "performance" "ALL")
                                                           (cons "profiler" "ALL")
                                                           (cons "client" "ALL")
                                                           (cons "driver" "INFO"))))
+                         ;; This may not even be recognized any more.
                          (cons "moz:firefoxOptions"
-                               (alex:alist-hash-table
+                               (alist-hash-table
                                 (list
                                  ;;(cons "binary" "/usr/local/bin/firefox")
                                  (cons "prefs"
-                                       (alex:alist-hash-table
+                                       (alist-hash-table
                                         (list (cons "dom.ipc.processCount" 8)
                                               (cons "devtools.console.stdout.content" "info")
                                               (cons "permissions.default.image" 2)
@@ -110,72 +120,79 @@
 (defun to-json (list)
   (check-type list list)
   (with-output-to-string (sink)
-    (yason:encode (alex:alist-hash-table list) sink)))
+    (yason:encode (alist-hash-table list) sink)))
+
+
+
+
+
+;;
+;; Connecting
+;;
+
+(defmacro make-request (path &key (method :POST) content parameters)
+  (with-gensyms (url)
+    `(let ((yason:*parse-object-key-fn* #'maybe-convert-to-keyword)
+           (yason:*parse-object-as* :plist)
+           (,url (format nil "http://~a:~a/wd/hub~a" *host* *port* ,path)))
+       (yason:parse
+        (drakma:http-request ,url
+                             :method ,method
+                             :content-type "application/json"
+                             :accept "application/json"
+                             :external-format-in :utf-8
+                             :external-format-out :utf-8
+                             :connection-timeout 30
+                             :read-timeout nil
+                             ,@(when parameters `(:parameters ,parameters))
+                             ,@(when content `(:content ,content)))))))
 
 (defun close-session ()
   "Close the current session, quitting the browser instance."
   (make-request (format nil "/session/~a" *session-id*) :method :delete))
 
-
-(defmacro with-session-id (session-id &rest body)
-  `(let ((*session-id* ,session-id))
-     (progn ,@body)))
-
-
 (defmacro with-session ((&key (autoclose t)) &body body)
   "Execute the body in a fresh session and browser instance."
-  (alex:with-gensyms (result-alist result)
-    `(let ((,result-alist (make-request "/session" :content (default-capabilities))))
-       (alexandria:if-let ((session-id (cdr (sassoc "sessionId" ,result-alist))))
-         (let ((*session-id* session-id))
-           (let ((,result (progn ,@body)))
-             ,(when autoclose
-                `(progn
-                   (close-window)
-                   (close-session)))
-             ,result))
-         (list `(cons "error" . ,(assoc :value ,result-alist)))))))
-
-(defun new-session ()
-  (cdr (sassoc "webdriver.remote.sessionid"
-               (cdr (sassoc "value" (make-request "/session" :content (default-capabilities)))))))
+  (with-gensyms (result-plist result)
+    `(let ((,result-plist (make-request "/session" :content (default-capabilities))))
+       (if-let ((session-id (getf ,result-plist :sessionid)))
+               (let ((*session-id* session-id)
+                     ,result)
+                 ,(if autoclose
+                    `(progn (unwind-protect
+                                 (setf ,result (progn ,@body))
+                              (ignore-errors
+                               (close-window)
+                               (close-session)))
+                            (values ,result *session-id*))
+                    `(progn ,@body)))))))
 
 (defmacro with-a-session (&body body)
   "Execute the body using the first avilable session on the server."
-  (let ((gs-sessions (gensym)))
+  (alexandria:with-gensyms (gs-sessions)
     `(let ((,gs-sessions (get-sessions)))
        (optima:match ,gs-sessions
          (() (with-session (:autoclose nil)
                ,@body))
          (otherwise (let ((*session-id* (car ,gs-sessions)))
-                      ,@body))))))
+                      (values (progn ,@body)
+                              *session-id*)))))))
 
-
-(defmacro with-body-element (&rest body)
-  `(let ((*body-element* (find-element "xpath" "//body")))
-     ,@body))
-
+(defun new-session ()
+  (getf (make-request "/session" :content (default-capabilities))
+        :sessionid))
 
 (defun get-sessions ()
   "Returns a list of the session ids currently active on the server."
-  (let ((lx (make-request "/sessions" :method :GET)))
-    (mapcar (lambda (x)
-              (cdr (sassoc "id" x)))
-            (cdr (sassoc "value" lx)))))
+  (mapcar (lambda (x)
+            (getf x :id))
+          (getf (make-request "/sessions" :method :GET)
+                :value)))
 
-(defun close-window ()
-  "Close the current browser window."
-  (make-request (format nil "/session/~a/window" *session-id*)
-                :method :DELETE))
 
-(defun get-log-types ()
-  (make-request (format nil "/session/~a/log/types" *session-id*)
-                :method :get))
-
-(defun get-log (log-type)
-  "Get the logs?"
-  (make-request (format nil "/session/~a/log" *session-id*)
-                :content (to-json (list (cons "type" log-type)))))
+;;
+;; Navigation
+;;
 
 (defun page-open (url)
   "Open a URL"
@@ -186,17 +203,27 @@
   "Assumes the element passed is a FORM element, and submits it."
   (make-request (format nil "/session/~a/element/~a/submit" *session-id* element)))
 
-(defun page-title ()
-  "Returns the page title."
-  (make-request (format nil "/session/~a/title" *session-id*)
-                   :method :GET))
+(defun page-click (element)
+  (getf (make-request (format nil "/session/~a/element/~a/click" *session-id* element)) :state))
+
+(defun close-window ()
+  "Close the current browser window."
+  (make-request (format nil "/session/~a/window" *session-id*)
+                :method :DELETE))
+
+
+;;
+;; Selection
+;; 
 
 (defun find-elements (method value)
   "Find a list of elements."
-  (let ((result (with-body-element
-                    (find-elements-from method value *body-element*))))
-    
-    (values (mapcar #'cdar (cdr (assoc "value" result :test #'string=)))
+  (let ((result (make-request (format nil "/session/~a/elements"
+                                      *session-id*)
+                              :method :post
+                              :content (to-json (list (cons "using" method)
+                                                      (cons "value" value))))))
+    (values (mapcar #'cadr (getf result :value))
             result)))
 
 (defun find-elements-from (method value element)
@@ -215,12 +242,10 @@
 
 (defun find-element (method value)
   "Find the first matching element."
-  (let ((result (make-request (format nil "/session/~a/element" *session-id*)
-                              :method :POST
-                              :content (to-json (list (cons "using" method)
-                                                      (cons "value" value))))))
-    (values (cdadr (assoc "value" result :test #'string=))
-            result)))
+  (make-request (format nil "/session/~a/element" *session-id*)
+                   :method :POST
+                   :content (to-json (list (cons "using" method)
+                                           (cons "value" value)))))
 
 (defun get-current-element ()
   "Returns the 'active' element."
@@ -234,9 +259,7 @@
   "Returns the text, if any, of the element."
   (let ((result (make-request (format nil "/session/~a/element/~a/text" *session-id* element)
                               :method :GET)))
-    
-    (values (cdr (assoc "value" result :test #'string=))
-            result )))
+    (getf result :value)))
 
 (defun get-parent (element)
   "Returns the parent element of <element>."
@@ -245,7 +268,84 @@
 (defun get-element-attribute (attribute element)
   "Get an attribute from <element>.  SRC, CLASS, etc."
   (make-request (format nil "/session/~a/element/~a/attribute/~a" *session-id* element attribute)
-                   :method :GET))
+                :method :GET))
+
+(defun page-title ()
+  "Returns the page title."
+  (getf (make-request (format nil "/session/~a/title" *session-id*)
+                      :method :GET)
+        :value))
+
+(defun get-page-source ()
+  "Returns the source of the current page."
+  (make-request (format nil "/session/~a/source" *session-id*)
+                :method :GET))
+
+(defun get-element-location (element)
+  (make-request (format nil "/session/~a/element/~a/location" *session-id* element)))
+
+(defun find-element-by-text (tag text)
+  (find-element "xpath" (format nil "//~a[normalize-space(.)='~a']" tag text)))
+
+(defun find-elements-by-text (tag text)
+  (find-elements "xpath" (format nil "//~a[normalize-space(.)='~a']" tag text)))
+
+
+
+;;
+;; Cookies
+;;
+
+(defun get-cookies ()
+  (make-request (format nil "/session/~a/cookie" *session-id*)
+                :method :get))
+
+(defun get-cookie (cookie-name)
+  (make-request (format nil "/session/~a/cookie/~a"
+                        *session-id* cookie-name)
+                :method :get))
+
+(defun set-cookie (&key name value (path "/") domain (secure-only t) (http-only nil)
+                   expiry-time (same-site t))
+  (make-request (format nil "/session/~a/cookie" *session-id*)
+                :method :post
+                :content (to-json
+                          (alist-hash-table
+                           (list
+                            (cons "name" name)
+                            (cons "value" value)
+
+                            (cons "path" path)
+                            (cons "domain" domain)
+                            (cons "secure-only" secure-only)
+                            (cons "http-only" http-only)
+                            (cons "expiry-time" expiry-time)
+                            (cons "same-site" same-site))))))
+
+(defun delete-cookie (name)
+  (make-request (format nil "/session/~a/cookie/~a"
+                        *session-id* name)
+                :method :delete))
+
+(defun delete-all-cookies ()
+  (make-request (format nil "/session/~a/cookie" *session-id*)
+                :method :delete))
+
+
+;;
+;; Misc.
+;;
+
+
+(defun get-log-types ()
+  (make-request (format nil "/session/~a/log/types" *session-id*)
+                :method :get))
+
+(defun get-log (log-type)
+  "Get the logs?"
+  (make-request (format nil "/session/~a/log" *session-id*)
+                :content (to-json (list (cons "type" log-type)))))
+
 
 (defun send-keys (element text)
   "Send keystrokes to <element>."
@@ -256,24 +356,9 @@
     (make-request (format nil "/session/~a/element/~a/value" *session-id* element)
                   :content (to-json (list (cons "value" (string-arrayify text)))))))
 
-(defun get-page-source ()
-  "Returns the source of the current page."
-  (make-request (format nil "/session/~a/source" *session-id*)
-                :method :GET))
-
-(defun get-element-location (element)
-  (make-request (format nil "/session/~a/element/~a/location" *session-id* element)))
-
-(defun page-click (element)
-  (cdr
-   (sassoc "state"
-           (make-request (format nil "/session/~a/element/~a/click" *session-id* element)))))
-
 (defun page-url ()
-  (cdr (assoc "value"
-              (make-request (format nil "/session/~a/url" *session-id*)
-                            :method :GET)
-              :test #'string=)))
+  (getf (make-request (format nil "/session/~a/url" *session-id*)
+                     :method :GET) :value))
 
 (defun focus-frame (&key (element nil))
   (make-request (format nil "/session/~a/frame" *session-id*)
@@ -283,16 +368,33 @@
   (make-request (format nil "/session/~a/touch/scroll" *session-id*)))
 
 (defun take-screenshot ()
-  (make-request (format nil "/session/~a/screenshot" *session-id*)
-                :method :get))
+  (getf (make-request (format nil "/session/~a/screenshot" *session-id*)
+                      :method :get)
+        :value))
+
+(defun take-element-screenshot (element)
+  (getf (make-request (format nil "/session/~a/element/~a/screenshot"
+                              *sessionid* element))
+        :value))
 
 (defun execute-javascript (javascript)
   (make-request (format nil "/session/~a/execute/sync" *session-id*)
                 :method :post
-                :content (to-json (list (cons "script" javascript)
-                                        (cons "args" (list "a"))))))
+                :content (to-json
+                          (list (cons "script" javascript)
+                                (cons "args" (list "a"))))))
+
+
+;; Page up and down are broken
+;; on lispworks and allegro until
+;; I figure out the 'right way' to
+;; do it on those platforms.
 
 (defparameter *body-element* nil)
+
+(defmacro with-body-element (&rest body)
+  `(let ((*body-element* (find-element "xpath" "//body")))
+     ,@body))
 
 (defun page-page-down ()
   (with-body-element
@@ -302,11 +404,7 @@
   (with-body-element
       (send-keys *body-element* "?")))
 
-(defun find-element-by-text (tag pattern)
-  (find-element "xpath" (format nil "//~a[normalize-space(.)='~a']" tag pattern)))
 
-(defun find-elements-by-text (tag pattern)
-  (find-elements "xpath" (format nil "//~a[normalize-space(.)='~a']" tag pattern)))
 
 
 
@@ -315,7 +413,7 @@
 ;;
 ;;
 
-#-allegro
+#-(or lispworks allegro)
 (defvar *keymap*
   '(:null #\ue000
     :cancel #\ue001
@@ -374,6 +472,6 @@
     :meta #\ue03d))
 
 ;; TODO: prepare all keys on compile
-#-allegro
+#-(or lispworks allegro)
 (defun key (key)
   (make-string 1 :initial-element (getf *keymap* key)))

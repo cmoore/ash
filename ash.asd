@@ -8,6 +8,8 @@
   :depends-on (#:drakma
                #:parenscript
                #:yason
-               #:optima)
+               #:optima
+               #:log4cl
+               #:json-mop)
   
   :components ((:file "ash")))

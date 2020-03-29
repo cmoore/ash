@@ -242,10 +242,12 @@
 
 (defun find-element (method value)
   "Find the first matching element."
-  (make-request (format nil "/session/~a/element" *session-id*)
-                   :method :POST
-                   :content (to-json (list (cons "using" method)
-                                           (cons "value" value)))))
+  (let ((result (make-request (format nil "/session/~a/element" *session-id*)
+                              :method :POST
+                              :content (to-json (list (cons "using" method)
+                                                      (cons "value" value))))))
+    (when (= 0 (getf result :status))
+      (cadr (getf result :value)))))
 
 (defun get-current-element ()
   "Returns the 'active' element."
@@ -382,7 +384,7 @@
                 :method :post
                 :content (to-json
                           (list (cons "script" javascript)
-                                (cons "args" (list "a"))))))
+                                (cons "args" "[]")))))
 
 
 ;; Page up and down are broken

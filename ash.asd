@@ -4,12 +4,11 @@
   :author "Clint Moore <clint@ivy.io>"
   :license "MIT"
   :serial t
-  
+
   :depends-on (#:drakma
                #:parenscript
-               #:yason
+               #:jsown
                #:optima
-               #:log4cl
-               #:json-mop)
-  
+               #:log4cl)
+
   :components ((:file "ash")))
